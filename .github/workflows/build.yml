@@ -1,0 +1,692 @@
+name: Build LitePlay APK
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Generate Project Files
+        run: |
+          mkdir -p app/src/main/java/com/liteplay/ultralite
+          mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/res/values
+
+          cat << 'EOF' > settings.gradle
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "LitePlay"
+          include ':app'
+          EOF
+
+          cat << 'EOF' > build.gradle
+          plugins {
+              id 'com.android.application' version '8.2.0' apply false
+              id 'org.jetbrains.kotlin.android' version '1.9.20' apply false
+          }
+          EOF
+
+          cat << 'EOF' > gradle.properties
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          EOF
+
+          cat << 'EOF' > app/build.gradle
+          plugins {
+              id 'com.android.application'
+              id 'org.jetbrains.kotlin.android'
+          }
+
+          android {
+              namespace 'com.liteplay.ultralite'
+              compileSdk 34
+
+              defaultConfig {
+                  applicationId "com.liteplay.ultralite"
+                  minSdk 21
+                  targetSdk 34
+                  versionCode 2
+                  versionName "1.1.0"
+              }
+
+              buildFeatures {
+                  viewBinding true
+              }
+
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+
+              kotlinOptions {
+                  jvmTarget = '17'
+              }
+          }
+
+          dependencies {
+              implementation 'androidx.core:core-ktx:1.12.0'
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+              implementation 'com.google.android.material:material:1.11.0'
+              implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+              implementation 'androidx.recyclerview:recyclerview:1.3.2'
+              implementation 'androidx.media3:media3-exoplayer:1.2.1'
+              implementation 'androidx.media3:media3-session:1.2.1'
+              implementation 'androidx.media3:media3-ui:1.2.1'
+          }
+          EOF
+
+          cat << 'EOF' > app/src/main/res/values/themes.xml
+          <resources>
+              <style name="Theme.LitePlay" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
+                  <item name="colorPrimary">#6200EE</item>
+                  <item name="colorPrimaryVariant">#3700B3</item>
+                  <item name="colorOnPrimary">#FFFFFF</item>
+              </style>
+          </resources>
+          EOF
+
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+              <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+              <application
+                  android:allowBackup="true"
+                  android:icon="@android:drawable/ic_media_play"
+                  android:label="LitePlay Ultra Lite"
+                  android:supportsRtl="true"
+                  android:theme="@style/Theme.LitePlay">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+
+                  <service
+                      android:name=".PlaybackService"
+                      android:exported="false"
+                      android:foregroundServiceType="mediaPlayback" />
+              </application>
+          </manifest>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/layout/item_media.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="wrap_content"
+              android:orientation="horizontal"
+              android:padding="12dp"
+              android:gravity="center_vertical"
+              android:background="?android:attr/selectableItemBackground">
+
+              <ImageView
+                  android:id="@+id/imgType"
+                  android:layout_width="40dp"
+                  android:layout_height="40dp"
+                  android:src="@android:drawable/ic_media_play" />
+
+              <LinearLayout
+                  android:layout_width="0dp"
+                  android:layout_height="wrap_content"
+                  android:layout_weight="1"
+                  android:layout_marginStart="12dp"
+                  android:orientation="vertical">
+
+                  <TextView
+                      android:id="@+id/txtTitle"
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:maxLines="1"
+                      android:ellipsize="end"
+                      android:textSize="16sp"
+                      android:textStyle="bold" />
+
+                  <TextView
+                      android:id="@+id/txtArtist"
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:maxLines="1"
+                      android:ellipsize="end"
+                      android:textSize="13sp" />
+              </LinearLayout>
+
+              <ImageButton
+                  android:id="@+id/btnFav"
+                  android:layout_width="40dp"
+                  android:layout_height="40dp"
+                  android:background="?android:attr/selectableItemBackgroundBorderless"
+                  android:src="@android:drawable/btn_star_big_off" />
+          </LinearLayout>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/layout/activity_main.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:orientation="vertical">
+
+              <LinearLayout
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:orientation="horizontal"
+                  android:padding="8dp"
+                  android:gravity="center_vertical">
+
+                  <Button
+                      android:id="@+id/btnFilterFav"
+                      android:layout_width="wrap_content"
+                      android:layout_height="wrap_content"
+                      android:text="All Songs" />
+              </LinearLayout>
+
+              <androidx.recyclerview.widget.RecyclerView
+                  android:id="@+id/recyclerView"
+                  android:layout_width="match_parent"
+                  android:layout_height="0dp"
+                  android:layout_weight="1" />
+
+              <LinearLayout
+                  android:id="@+id/miniPlayerLayout"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:orientation="horizontal"
+                  android:background="#242424"
+                  android:padding="10dp"
+                  android:gravity="center_vertical"
+                  android:visibility="gone">
+
+                  <LinearLayout
+                      android:layout_width="0dp"
+                      android:layout_height="wrap_content"
+                      android:layout_weight="1"
+                      android:orientation="vertical">
+
+                      <TextView
+                          android:id="@+id/txtMiniTitle"
+                          android:layout_width="match_parent"
+                          android:layout_height="wrap_content"
+                          android:textColor="#FFFFFF"
+                          android:textStyle="bold"
+                          android:maxLines="1"
+                          android:ellipsize="end"
+                          android:text="Song Title" />
+
+                      <TextView
+                          android:id="@+id/txtMiniArtist"
+                          android:layout_width="match_parent"
+                          android:layout_height="wrap_content"
+                          android:textColor="#CCCCCC"
+                          android:textSize="12sp"
+                          android:maxLines="1"
+                          android:ellipsize="end"
+                          android:text="Artist" />
+                  </LinearLayout>
+
+                  <Button
+                      android:id="@+id/btnMiniRepeat"
+                      android:layout_width="wrap_content"
+                      android:layout_height="40dp"
+                      android:text="RPT: OFF"
+                      android:textSize="11sp" />
+
+                  <ImageButton
+                      android:id="@+id/btnMiniFavorite"
+                      android:layout_width="40dp"
+                      android:layout_height="40dp"
+                      android:background="?android:attr/selectableItemBackgroundBorderless"
+                      android:src="@android:drawable/btn_star_big_off" />
+
+                  <ImageButton
+                      android:id="@+id/btnMiniPlayPause"
+                      android:layout_width="44dp"
+                      android:layout_height="44dp"
+                      android:background="?android:attr/selectableItemBackgroundBorderless"
+                      android:src="@android:drawable/ic_media_pause" />
+              </LinearLayout>
+          </LinearLayout>
+          EOF
+
+          cat << 'EOF' > app/src/main/java/com/liteplay/ultralite/MediaItemModel.kt
+          package com.liteplay.ultralite
+
+          import android.net.Uri
+
+          data class MediaItemModel(
+              val id: Long,
+              val title: String,
+              val artist: String,
+              val uri: Uri,
+              val duration: Long,
+              var isFavorite: Boolean = false
+          )
+          EOF
+
+          cat << 'EOF' > app/src/main/java/com/liteplay/ultralite/PrefsManager.kt
+          package com.liteplay.ultralite
+
+          import android.content.Context
+          import android.content.SharedPreferences
+
+          class PrefsManager(context: Context) {
+              private val prefs: SharedPreferences =
+                  context.getSharedPreferences("liteplay_prefs", Context.MODE_PRIVATE)
+
+              fun isFavorite(mediaId: Long): Boolean {
+                  val favs = prefs.getStringSet(KEY_FAVS, emptySet()) ?: emptySet()
+                  return favs.contains(mediaId.toString())
+              }
+
+              fun toggleFavorite(mediaId: Long): Boolean {
+                  val favs = (prefs.getStringSet(KEY_FAVS, emptySet()) ?: emptySet()).toMutableSet()
+                  val idStr = mediaId.toString()
+                  val isFavNow = if (favs.contains(idStr)) {
+                      favs.remove(idStr)
+                      false
+                  } else {
+                      favs.add(idStr)
+                      true
+                  }
+                  prefs.edit().putStringSet(KEY_FAVS, favs).apply()
+                  return isFavNow
+              }
+
+              companion object {
+                  private const val KEY_FAVS = "favorite_song_ids"
+              }
+          }
+          EOF
+
+          cat << 'EOF' > app/src/main/java/com/liteplay/ultralite/PlaybackService.kt
+          package com.liteplay.ultralite
+
+          import android.app.Notification
+          import android.app.NotificationChannel
+          import android.app.NotificationManager
+          import android.app.PendingIntent
+          import android.app.Service
+          import android.content.Intent
+          import android.os.Binder
+          import android.os.Build
+          import android.os.IBinder
+          import androidx.core.app.NotificationCompat
+          import androidx.media3.common.MediaItem
+          import androidx.media3.common.Player
+          import androidx.media3.exoplayer.ExoPlayer
+
+          class PlaybackService : Service() {
+              private val binder = LocalBinder()
+              lateinit var player: ExoPlayer
+                  private set
+
+              inner class LocalBinder : Binder() {
+                  fun getService(): PlaybackService = this@PlaybackService
+              }
+
+              override fun onCreate() {
+                  super.onCreate()
+                  player = ExoPlayer.Builder(this).build()
+                  createNotificationChannel()
+              }
+
+              override fun onBind(intent: Intent?): IBinder = binder
+
+              fun playPlaylist(items: List<MediaItemModel>, startIndex: Int) {
+                  val mediaItems = items.map { MediaItem.fromUri(it.uri) }
+                  player.setMediaItems(mediaItems, startIndex, 0L)
+                  player.prepare()
+                  player.play()
+                  startForegroundServiceNotification()
+              }
+
+              fun cycleRepeatMode(): Int {
+                  val nextMode = when (player.repeatMode) {
+                      Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                      Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                      else -> Player.REPEAT_MODE_OFF
+                  }
+                  player.repeatMode = nextMode
+                  return nextMode
+              }
+
+              private fun startForegroundServiceNotification() {
+                  val pendingIntent = PendingIntent.getActivity(
+                      this, 0, Intent(this, MainActivity::class.java),
+                      PendingIntent.FLAG_IMMUTABLE
+                  )
+                  val notification: Notification = NotificationCompat.Builder(this, "music_ch")
+                      .setContentTitle("LitePlay Ultra Lite")
+                      .setContentText("Playing music...")
+                      .setSmallIcon(android.R.drawable.ic_media_play)
+                      .setContentIntent(pendingIntent)
+                      .setOngoing(true)
+                      .build()
+
+                  startForeground(1, notification)
+              }
+
+              private fun createNotificationChannel() {
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                      val channel = NotificationChannel(
+                          "music_ch", "Music Playback",
+                          NotificationManager.IMPORTANCE_LOW
+                      )
+                      getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
+                  }
+              }
+
+              override fun onDestroy() {
+                  player.release()
+                  super.onDestroy()
+              }
+          }
+          EOF
+
+          cat << 'EOF' > app/src/main/java/com/liteplay/ultralite/MediaAdapter.kt
+          package com.liteplay.ultralite
+
+          import android.view.LayoutInflater
+          import android.view.View
+          import android.view.ViewGroup
+          import android.widget.ImageButton
+          import android.widget.TextView
+          import androidx.recyclerview.widget.RecyclerView
+
+          class MediaAdapter(
+              private var items: List<MediaItemModel>,
+              private val onItemClick: (Int) -> Unit,
+              private val onFavoriteToggle: (MediaItemModel, Int) -> Unit
+          ) : RecyclerView.Adapter<MediaAdapter.MediaViewHolder>() {
+
+              class MediaViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+                  val title: TextView = itemView.findViewById(R.id.txtTitle)
+                  val artist: TextView = itemView.findViewById(R.id.txtArtist)
+                  val btnFav: ImageButton = itemView.findViewById(R.id.btnFav)
+              }
+
+              override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MediaViewHolder {
+                  val view = LayoutInflater.from(parent.context)
+                      .inflate(R.layout.item_media, parent, false)
+                  return MediaViewHolder(view)
+              }
+
+              override fun onBindViewHolder(holder: MediaViewHolder, position: Int) {
+                  val item = items[position]
+                  holder.title.text = item.title
+                  holder.artist.text = item.artist
+                  holder.btnFav.setImageResource(
+                      if (item.isFavorite) android.R.drawable.btn_star_big_on
+                      else android.R.drawable.btn_star_big_off
+                  )
+                  holder.itemView.setOnClickListener { onItemClick(position) }
+                  holder.btnFav.setOnClickListener { onFavoriteToggle(item, position) }
+              }
+
+              override fun getItemCount(): Int = items.size
+
+              fun updateList(newList: List<MediaItemModel>) {
+                  items = newList
+                  notifyDataSetChanged()
+              }
+          }
+          EOF
+
+          cat << 'EOF' > app/src/main/java/com/liteplay/ultralite/MainActivity.kt
+          package com.liteplay.ultralite
+
+          import android.Manifest
+          import android.content.ComponentName
+          import android.content.ContentUris
+          import android.content.Context
+          import android.content.Intent
+          import android.content.ServiceConnection
+          import android.content.pm.PackageManager
+          import android.os.Build
+          import android.os.Bundle
+          import android.os.IBinder
+          import android.provider.MediaStore
+          import android.view.View
+          import androidx.appcompat.app.AppCompatActivity
+          import androidx.core.app.ActivityCompat
+          import androidx.core.content.ContextCompat
+          import androidx.media3.common.MediaItem
+          import androidx.media3.common.Player
+          import androidx.recyclerview.widget.LinearLayoutManager
+          import com.liteplay.ultralite.databinding.ActivityMainBinding
+
+          class MainActivity : AppCompatActivity() {
+
+              private lateinit var binding: ActivityMainBinding
+              private lateinit var prefsManager: PrefsManager
+              private lateinit var adapter: MediaAdapter
+              private val allSongs = mutableListOf<MediaItemModel>()
+              private var displayedSongs = listOf<MediaItemModel>()
+              private var showFavoritesOnly = false
+
+              private var playbackService: PlaybackService? = null
+              private var isBound = false
+
+              private val connection = object : ServiceConnection {
+                  override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+                      val binder = service as PlaybackService.LocalBinder
+                      playbackService = binder.getService()
+                      isBound = true
+                      playbackService?.player?.addListener(object : Player.Listener {
+                          override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                              updateMiniPlayer()
+                          }
+                          override fun onIsPlayingChanged(isPlaying: Boolean) {
+                              updateMiniPlayer()
+                          }
+                      })
+                      updateMiniPlayer()
+                  }
+
+                  override fun onServiceDisconnected(name: ComponentName?) {
+                      playbackService = null
+                      isBound = false
+                  }
+              }
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  binding = ActivityMainBinding.inflate(layoutInflater)
+                  setContentView(binding.root)
+
+                  prefsManager = PrefsManager(this)
+                  setupRecyclerView()
+                  setupControls()
+
+                  val intent = Intent(this, PlaybackService::class.java)
+                  startService(intent)
+                  bindService(intent, connection, Context.BIND_AUTO_CREATE)
+
+                  checkPermissionAndLoad()
+              }
+
+              private fun setupRecyclerView() {
+                  adapter = MediaAdapter(
+                      displayedSongs,
+                      onItemClick = { index ->
+                          playbackService?.playPlaylist(displayedSongs, index)
+                          updateMiniPlayer()
+                      },
+                      onFavoriteToggle = { item, pos ->
+                          val newState = prefsManager.toggleFavorite(item.id)
+                          item.isFavorite = newState
+                          adapter.notifyItemChanged(pos)
+                          updateMiniPlayer()
+                      }
+                  )
+                  binding.recyclerView.layoutManager = LinearLayoutManager(this)
+                  binding.recyclerView.adapter = adapter
+              }
+
+              private fun setupControls() {
+                  binding.btnFilterFav.setOnClickListener {
+                      showFavoritesOnly = !showFavoritesOnly
+                      binding.btnFilterFav.text = if (showFavoritesOnly) "Showing: Favorites ⭐" else "All Songs"
+                      refreshDisplayedList()
+                  }
+
+                  binding.btnMiniPlayPause.setOnClickListener {
+                      val player = playbackService?.player ?: return@setOnClickListener
+                      if (player.isPlaying) player.pause() else player.play()
+                      updateMiniPlayer()
+                  }
+
+                  binding.btnMiniRepeat.setOnClickListener {
+                      val mode = playbackService?.cycleRepeatMode() ?: return@setOnClickListener
+                      binding.btnMiniRepeat.text = when (mode) {
+                          Player.REPEAT_MODE_ALL -> "RPT: ALL"
+                          Player.REPEAT_MODE_ONE -> "RPT: ONE"
+                          else -> "RPT: OFF"
+                      }
+                  }
+
+                  binding.btnMiniFavorite.setOnClickListener {
+                      val player = playbackService?.player ?: return@setOnClickListener
+                      val idx = player.currentMediaItemIndex
+                      if (idx in displayedSongs.indices) {
+                          val item = displayedSongs[idx]
+                          item.isFavorite = prefsManager.toggleFavorite(item.id)
+                          adapter.notifyDataSetChanged()
+                          updateMiniPlayer()
+                      }
+                  }
+              }
+
+              private fun refreshDisplayedList() {
+                  displayedSongs = if (showFavoritesOnly) {
+                      allSongs.filter { it.isFavorite }
+                  } else {
+                      allSongs.toList()
+                  }
+                  adapter.updateList(displayedSongs)
+              }
+
+              private fun updateMiniPlayer() {
+                  val player = playbackService?.player ?: return
+                  if (player.mediaItemCount == 0) {
+                      binding.miniPlayerLayout.visibility = View.GONE
+                      return
+                  }
+                  binding.miniPlayerLayout.visibility = View.VISIBLE
+                  val idx = player.currentMediaItemIndex
+                  if (idx in displayedSongs.indices) {
+                      val current = displayedSongs[idx]
+                      binding.txtMiniTitle.text = current.title
+                      binding.txtMiniArtist.text = current.artist
+                      binding.btnMiniFavorite.setImageResource(
+                          if (current.isFavorite) android.R.drawable.btn_star_big_on
+                          else android.R.drawable.btn_star_big_off
+                      )
+                  }
+                  binding.btnMiniPlayPause.setImageResource(
+                      if (player.isPlaying) android.R.drawable.ic_media_pause
+                      else android.R.drawable.ic_media_play
+                  )
+              }
+
+              private fun checkPermissionAndLoad() {
+                  val perm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                      Manifest.permission.READ_MEDIA_AUDIO
+                  } else {
+                      Manifest.permission.READ_EXTERNAL_STORAGE
+                  }
+                  if (ContextCompat.checkSelfPermission(this, perm) == PackageManager.PERMISSION_GRANTED) {
+                      loadSongs()
+                  } else {
+                      ActivityCompat.requestPermissions(this, arrayOf(perm), 101)
+                  }
+              }
+
+              override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+                  super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+                  if (requestCode == 101 && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                      loadSongs()
+                  }
+              }
+
+              private fun loadSongs() {
+                  allSongs.clear()
+                  val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+                  val projection = arrayOf(
+                      MediaStore.Audio.Media._ID,
+                      MediaStore.Audio.Media.TITLE,
+                      MediaStore.Audio.Media.ARTIST,
+                      MediaStore.Audio.Media.DURATION
+                  )
+                  contentResolver.query(uri, projection, "${MediaStore.Audio.Media.IS_MUSIC} != 0", null, null)?.use { cursor ->
+                      val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+                      val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+                      val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+                      val durCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+
+                      while (cursor.moveToNext()) {
+                          val id = cursor.getLong(idCol)
+                          val title = cursor.getString(titleCol) ?: "Unknown"
+                          val artist = cursor.getString(artistCol) ?: "Unknown Artist"
+                          val duration = cursor.getLong(durCol)
+                          val contentUri = ContentUris.withAppendedId(uri, id)
+                          val isFav = prefsManager.isFavorite(id)
+                          allSongs.add(MediaItemModel(id, title, artist, contentUri, duration, isFav))
+                      }
+                  }
+                  refreshDisplayedList()
+              }
+
+              override fun onDestroy() {
+                  if (isBound) {
+                      unbindService(connection)
+                      isBound = false
+                  }
+                  super.onDestroy()
+              }
+          }
+          EOF
+
+      - name: Build Debug APK
+        run: |
+          gradle wrapper --gradle-version 8.2
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LitePlay-Ultra-Lite-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
